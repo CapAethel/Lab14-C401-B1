@@ -1,4 +1,7 @@
 # Báo cáo cá nhân - Hứa Quang Linh (Agent & Async Runner)
+**Mã học viên: 2A202600466**
+**Lab Day 14 — AI Evaluation Factory**
+**Ngày:** 21/04/2026
 
 ## 1) Vai trò và phạm vi công việc
 - Thành viên phụ trách phần **Agent & Async Runner** (`main_agent.py`, `runner.py`).
