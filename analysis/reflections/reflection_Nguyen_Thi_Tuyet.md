@@ -1,4 +1,4 @@
-# Báo cáo cá nhân - Nguyễn Thị Tuyết (Regression Gate & `main.py`)
+# Báo cáo cá nhân - Nguyễn Thị Tuyết - 2A202600215 (Regression Gate & `main.py`)
 
 ## 1) Vai trò và phạm vi công việc
 - Thành viên phụ trách phần **Regression Release Gate** trong `main.py`.
