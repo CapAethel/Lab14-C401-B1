@@ -1,3 +1,13 @@
+# So sánh hiệu năng benchmark runner giữa batch_size=5 và batch_size=2
+
+| batch_size | Tổng thời gian chạy (s) | Số lượng test case |
+|------------|------------------------|--------------------|
+| 2          | 11.91                  | 5                  |
+| 5          | 9.05                   | 5                  |
+
+**Nhận xét:**
+- Khi tăng batch_size từ 2 lên 5, tổng thời gian benchmark giảm rõ rệt (~24%).
+- Điều này chứng minh pipeline async tận dụng tốt tài nguyên, giúp tiết kiệm thời gian khi xử lý nhiều case.
 # Kết quả Benchmark Runner
 
 - Tổng thời gian chạy: **11.16s**  (batch_size=5)
