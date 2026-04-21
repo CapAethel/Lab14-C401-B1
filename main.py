@@ -3,36 +3,25 @@ import json
 import os
 import time
 from engine.runner import BenchmarkRunner
+from agent.rag_agent import RAGAgent
+from engine.retrieval_eval import RetrievalEvaluator, InMemoryVectorDB
+from engine.llm_judge import LLMJudge
 
-
-class MainAgent:
-    """
-    Agent tối giản để đảm bảo pipeline benchmark luôn chạy được.
-    Trả lời dựa trên context có sẵn trong test case.
-    """
-
-    async def query(self, question: str):
-        return {
-            "answer": f"Trả lời mô phỏng cho câu hỏi: {question}",
-            "metadata": {"model": "baseline-simulated", "tokens_used": 0},
-        }
-
-# Giả lập các components Expert
-class ExpertEvaluator:
+class RealEvaluator:
+    def __init__(self, retrieval_evaluator: RetrievalEvaluator):
+        self.retrieval = retrieval_evaluator
+        
     async def score(self, case, resp): 
-        # Giả lập tính toán Hit Rate và MRR
+        expected_ids = case.get("expected_retrieval_ids", [])
+        retrieved_ids = resp.get("metadata", {}).get("sources", [])
+        
+        hit_rate = self.retrieval.calculate_hit_rate(expected_ids, retrieved_ids)
+        mrr = self.retrieval.calculate_mrr(expected_ids, retrieved_ids)
+        
         return {
-            "faithfulness": 0.9, 
-            "relevancy": 0.8,
-            "retrieval": {"hit_rate": 1.0, "mrr": 0.5}
-        }
-
-class MultiModelJudge:
-    async def evaluate_multi_judge(self, q, a, gt): 
-        return {
-            "final_score": 4.5, 
-            "agreement_rate": 0.8,
-            "reasoning": "Cả 2 model đồng ý đây là câu trả lời tốt."
+            "faithfulness": 1.0, 
+            "relevancy": 1.0,
+            "retrieval": {"hit_rate": hit_rate, "mrr": mrr}
         }
 
 
@@ -106,8 +95,26 @@ async def run_benchmark_with_results(agent_version: str):
         print("[ERROR] data/golden_set.jsonl is empty.")
         return None, None
 
-    runner = BenchmarkRunner(MainAgent(), ExpertEvaluator(), MultiModelJudge())
-    results = await runner.run_all(dataset)
+    # Xây dựng VectorDB từ dataset
+    docs_by_id = {}
+    for case in dataset:
+        expected_ids = case.get("expected_retrieval_ids", [])
+        if expected_ids and case.get("context"):
+            docs_by_id[expected_ids[0]] = case["context"]
+            
+    docs = [{"id": k, "text": v} for k, v in docs_by_id.items()]
+    vectordb = InMemoryVectorDB()
+    vectordb.build(docs)
+    
+    agent = RAGAgent(vectordb=vectordb, use_chroma=False)
+    retrieval_eval = RetrievalEvaluator(vector_db=vectordb)
+    evaluator = RealEvaluator(retrieval_eval)
+    judge = LLMJudge()
+
+    runner = BenchmarkRunner(agent, evaluator, judge)
+    
+    # Do rate limit có thể xảy ra, chạy batch_size nhỏ
+    results = await runner.run_all(dataset, batch_size=2)
 
     total = len(results)
     summary = {

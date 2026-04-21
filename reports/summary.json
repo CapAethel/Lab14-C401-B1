@@ -1,0 +1,31 @@
+{
+  "metadata": {
+    "version": "Agent_V2_Optimized",
+    "baseline_version": "Agent_V1_Base",
+    "total": 55,
+    "timestamp": "2026-04-21 16:53:34"
+  },
+  "metrics": {
+    "avg_score": 3.187878787878788,
+    "hit_rate": 0.9818181818181818,
+    "agreement_rate": 0.38181818181818183
+  },
+  "regression": {
+    "decision": "ROLLBACK",
+    "reason": "V2 làm giảm ít nhất một metric quan trọng.",
+    "deltas": {
+      "avg_score": -0.07272727272727275,
+      "hit_rate": 0.0
+    },
+    "v1_metrics": {
+      "avg_score": 3.2606060606060607,
+      "hit_rate": 0.9818181818181818,
+      "agreement_rate": 0.38181818181818183
+    },
+    "v2_metrics": {
+      "avg_score": 3.187878787878788,
+      "hit_rate": 0.9818181818181818,
+      "agreement_rate": 0.38181818181818183
+    }
+  }
+}
