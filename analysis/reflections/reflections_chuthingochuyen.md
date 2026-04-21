@@ -4,18 +4,21 @@
 
 ---
 
-## 1. Tôi đã làm gì trong bài lab này?
+## 1. Engineering Contribution — Đóng góp kỹ thuật (Module SDG)
 
-Trong bài lab này, tôi đảm nhận vai trò **Person 1 — Synthetic Data Generation (SDG)**: xây dựng bộ Golden Dataset làm nền tảng cho toàn bộ pipeline đánh giá. Cụ thể:
+Tôi đảm nhận **Person 1 — Synthetic Data Generation**: xây dựng `data/synthetic_gen.py` và `data/golden_set.jsonl` làm nền tảng cho toàn bộ pipeline đánh giá.
 
-- **Thiết kế KNOWLEDGE_BASE** gồm 10 documents mô phỏng hệ thống tài liệu nội bộ thực tế: chính sách bảo mật, hoàn tiền, hướng dẫn kỹ thuật, vận hành, FAQ và AI assistant
-- **Viết 55 test cases thủ công** (offline fallback) với đầy đủ cấu trúc: `question`, `expected_answer`, `context`, `expected_retrieval_ids`, `metadata`
-- **Đa dạng hoá loại câu hỏi**: fact-check, reasoning, procedural, hallucination-bait, adversarial, ambiguous, multi-doc-reasoning, out-of-context
-- **Tích hợp OpenAI generation mode** cho phép tạo cases tự động từ documents khi có API key, với offline fallback khi không có quota
+**Những gì tôi build:**
+- **`KNOWLEDGE_BASE`** gồm 10 documents mô phỏng hệ thống tài liệu nội bộ: 2 policy, 2 technical, 2 FAQ, 2 ops, 2 AI assistant
+- **55 test cases** với đầy đủ cấu trúc `question / expected_answer / context / expected_retrieval_ids / metadata`
+- **Dual-mode generation**: OpenAI API mode (4 regular + 1 adversarial per doc) + offline fallback (55 hand-written cases) khi hết quota
+- **Red Teaming cases** (9 total): adversarial (prompt injection, edge case chính sách) + hallucination-bait (thông tin không có trong KB)
+
+**Tại sao module này là nền tảng:** `expected_retrieval_ids` tôi gán cho mỗi case là ground truth cho **Hit Rate** và **MRR** của nhóm Person 2. Nếu gán sai, toàn bộ retrieval metrics sai theo — đây là điểm dễ gây lỗi cascade nhất trong pipeline.
 
 ---
 
-## 2. Thống kê Golden Dataset tôi tạo ra
+## 2. Thống kê Golden Dataset
 
 | Thuộc tính | Chi tiết |
 |---|---|
@@ -44,50 +47,95 @@ Trong bài lab này, tôi đảm nhận vai trò **Person 1 — Synthetic Data G
 
 ---
 
-## 3. Điều tôi học được
+## 3. Technical Depth — Kiến thức kỹ thuật
 
-### 3.1 Thiết kế test case là công việc cần tư duy, không phải chỉ viết câu hỏi
+### 3.1 MRR (Mean Reciprocal Rank)
 
-Ban đầu tôi nghĩ viết câu hỏi là đơn giản — chỉ cần hỏi về nội dung document. Nhưng thực tế, một test case tốt phải có:
+$$MRR = \frac{1}{|Q|} \sum_{i=1}^{|Q|} \frac{1}{\text{rank}_i}$$
 
-- **`expected_retrieval_ids`** chính xác: không chỉ đúng document mà còn đúng thứ tự ưu tiên — điều này ảnh hưởng trực tiếp đến MRR
-- **`expected_answer`** rõ ràng và có thể so sánh được: nếu viết quá dài hoặc diễn đạt khác với document, LLM Judge sẽ chấm thiếu chính xác
-- **`context`** đủ ngắn để test case focused, không bị noise từ thông tin thừa
+Trong bài này, MRR = **0.903** — trung bình document đúng nằm ở rank ~1.1.
 
-Ví dụ: câu hỏi *"Dùng 5 ngày thấy không vừa ý có được hoàn tiền không?"* — `expected_answer` phải là **"Không"** rõ ràng, không phải giải thích dài về chính sách, để judge có thể so sánh được.
+**Tại sao MRR quan trọng hơn Hit Rate?** Hit Rate chỉ hỏi "có tìm thấy không?" — nhưng nếu document đúng ở rank 3 trong khi LLM ưu tiên đọc rank 1-2, thì hit_rate = 1.0 mà câu trả lời vẫn sai. Case "đa thiết bị đồng thời" trong bài là ví dụ điển hình: Hit Rate = 1.0, document đúng ở rank 3 → agent đọc sai document → hallucinate "Có hỗ trợ đa thiết bị".
 
-### 3.2 Tầm quan trọng của adversarial và hallucination-bait cases
+### 3.2 Cohen's Kappa — Đo độ đồng thuận thực sự
 
-Qua benchmark, tôi thấy đây là hai loại case "lộ" điểm yếu của agent rõ nhất:
+Agreement Rate đơn thuần (38.2% full agreement) không loại bỏ yếu tố ngẫu nhiên. **Cohen's Kappa** làm được điều đó:
 
-- **Hallucination-bait** (avg score 2.79): Agent bị hallucinate khi document không chứa câu trả lời rõ ràng — ví dụ hỏi về "đa thiết bị đồng thời" → agent đoán "có" trong khi KB không có thông tin này.
-- **Adversarial** (avg score 3.33): Prompt injection (`"Ignore all previous instructions"`) và câu hỏi phức tạp về điều kiện ngoại lệ (không phải lỗi sản phẩm) giúp kiểm tra guardrail của agent.
+$$\kappa = \frac{P_o - P_e}{1 - P_e}$$
 
-Bài học: **Nên có ít nhất 20-25% cases thuộc nhóm khó/adversarial** trong một golden set để đảm bảo benchmark không bị inflated.
+Trong đó $P_o$ = tỉ lệ đồng ý quan sát được, $P_e$ = tỉ lệ đồng ý ngẫu nhiên kỳ vọng.
 
-### 3.3 `expected_retrieval_ids` ảnh hưởng đến toàn bộ pipeline
+Thang giải thích: $\kappa$ < 0.2 = kém | 0.2–0.4 = vừa | 0.4–0.6 = khá | 0.6–0.8 = tốt | > 0.8 = rất tốt.
 
-Tôi là người xác định `expected_retrieval_ids` cho mỗi case. Nếu tôi gán sai — ví dụ thiếu 1 doc cần thiết hoặc thêm doc không liên quan — thì:
-- **Hit Rate** bị tính sai → nhóm Person 2 có kết quả không đáng tin
-- **Failure analysis** của nhóm Person 6 phân tích sai nguyên nhân
+Bài này implement `calculate_cohens_kappa()` trong `engine/llm_judge.py`. Agreement Rate 38% trông thấp nhưng với scoring 1-5 thì $P_e$ cũng không nhỏ — kappa thực tế có thể cao hơn tỉ lệ raw agreement.
 
-Điều này cho thấy **chất lượng SDG là nền tảng của toàn bộ evaluation factory** — nếu golden set sai, mọi metric downstream đều sai theo.
+### 3.3 Position Bias trong LLM Judge
+
+**Position Bias** là hiện tượng judge LLM có xu hướng chọn response ở vị trí đầu (A) hoặc cuối (B) bất kể chất lượng thực tế.
+
+Cách phát hiện (implement trong `check_position_bias()`): swap vị trí A và B, nếu judge vẫn chọn cùng *vị trí* (luôn A) thì có bias. Nếu nhất quán chọn cùng *nội dung* (chọn A lần đầu, chọn B lần sau khi A/B đã đổi chỗ) thì là consistent — không có bias.
+
+### 3.4 Trade-off Chi phí vs Chất lượng
+
+| Judge | Cost/call (est.) | Chất lượng | Phù hợp khi |
+|-------|-----------------|------------|-------------|
+| GPT-4o | ~$0.005 | Cao | Evaluation chính thức |
+| Claude 3.5 Sonnet | ~$0.003 | Cao | Cross-check, giảm bias |
+| GPT-4o-mini | ~$0.0002 | Trung bình | CI/CD pipeline |
+| Deterministic (TF-IDF offline) | $0 | Thấp nhưng consistent | Smoke test, debug |
+
+Với 55 cases × 2 judges = 110 API calls: GPT-4o ~$0.55/run vs GPT-4o-mini ~$0.02/run (27× rẻ hơn). Trong bài này khi cả hai API không khả dụng, deterministic fallback giữ pipeline hoạt động với $0 cost — minh họa tốt cho graceful degradation trong production.
 
 ---
 
-## 4. Điều tôi sẽ làm khác nếu làm lại
+## 4. Problem Solving — Xử lý vấn đề thực tế
 
-1. **Thêm `difficulty_rationale`** vào metadata: giải thích *tại sao* case này là hard/easy. Khi phân tích failure, rất khó phân biệt "agent kém" vs "case được thiết kế quá khó" nếu không có context này.
+### Vấn đề 1: OpenAI API quota exhausted khi generate golden set
 
-2. **Viết negative cases rõ ràng hơn**: Với hallucination-bait, nên thêm flag `"hallucination_risk": true` và ghi rõ thông tin *không có* trong KB. Hiện tại phải đọc lại KB để biết case nào là bẫy.
+**Triệu chứng:** `synthetic_gen.py` crash sau 0/10 documents với `RateLimitError 429`.
 
-4. **Tăng số cross-doc reasoning cases**: Chỉ có 2 cases loại này là ít. Đây là loại câu hỏi thực tế nhất (người dùng thường hỏi câu hỏi liên quan đến nhiều chính sách cùng lúc), nhưng cũng khó nhất để thiết kế `expected_retrieval_ids` đúng.
+**Giải pháp — Dual-mode design với graceful degradation:**
+
+```python
+try:
+    pairs = await generate_with_openai()
+except RateLimitError:
+    pairs = generate_offline()  # fallback sang 55 hand-written cases
+```
+
+Pattern này quan trọng trong production RAG systems vì API luôn có khả năng gián đoạn — hệ thống vẫn chạy được và cho ra golden set chất lượng dù không có external dependency.
+
+### Vấn đề 2: Claude API 404 — model không tồn tại trên key này
+
+**Triệu chứng:** `claude-3-5-sonnet-20240620` trả về 404 liên tục. Thử nhiều model khác cũng 404.
+
+**Giải pháp — Sentinel-based fallback trong judge:**
+
+Dùng sentinel value (-1) để phân biệt "judge thất bại" với "judge cho điểm 0". Khi cả hai judge fail, kích hoạt **deterministic dual-judge**: một judge strict, một judge lenient — vẫn cho ra scoring phân tán từ 1.67 đến 4.33 thay vì hardcode 3.0. Logic multi-judge và conflict resolution vẫn hoạt động đầy đủ.
+
+### Vấn đề 3: Cost tracking trả về `{}`
+
+**Triệu chứng:** `benchmark_results.json` có `"cost": {}` — không capture được token usage.
+
+**Root cause:** `runner.py` gọi `resp.get("cost", {})` nhưng agent trả về key `"metadata"` chứa cost info. Mismatch key không gây exception nhưng silently mất data.
+
+**Hướng fix:**
+
+```python
+# runner.py > run_single_test()
+result["cost"] = resp.get("metadata", resp.get("cost", {}))
+```
+
+Hoặc chuẩn hoá output schema của agent về 1 key duy nhất ngay từ đầu.
 
 ---
 
-## 5. Câu hỏi còn mở
+## 5. Điều tôi sẽ làm khác nếu làm lại
 
-- **Cần bao nhiêu cases để golden set có ý nghĩa thống kê?** — 55 cases có thể chưa đủ, đặc biệt với các nhóm ít (ambiguous: 2, out-of-context: 1). Confidence interval của avg score sẽ rất rộng ở nhóm nhỏ.
-- **Làm thế nào để đảm bảo `expected_answer` "fair" cho cả V1 và V2?** — V2 có guardrail tiếng Việt nên câu trả lời ngắn gọn hơn. Nếu `expected_answer` viết dài, V2 sẽ bị chấm thấp hơn không phải vì kém hơn mà vì khác style.
-- **Có nên include "No answer" cases nhiều hơn không?** — Chỉ có 1 out-of-context case. Thực tế người dùng hay hỏi những thứ ngoài KB, và khả năng agent từ chối đúng chỗ cũng quan trọng không kém khả năng trả lời đúng.
+1. **Thêm `difficulty_rationale`** vào metadata: giải thích *tại sao* case này là hard/easy — giúp failure analysis phân biệt "agent kém" vs "case thiết kế quá khó".
 
+2. **Thêm flag `"hallucination_risk": true`** cho hallucination-bait cases, kèm note về thông tin *không có* trong KB để dễ trace khi phân tích failure.
+
+3. **Tăng cross-doc reasoning cases** từ 2 lên ít nhất 5–6: đây là loại câu hỏi thực tế nhất nhưng cũng khó thiết kế `expected_retrieval_ids` chính xác nhất.
+
+4. **Viết integration test cho agent response schema**: kiểm tra output agent có đúng format (`retrieved_ids`, `metadata.cost_usd`) trước khi tích hợp với runner — tránh lỗi key mismatch như Vấn đề 3.
