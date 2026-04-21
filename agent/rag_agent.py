@@ -1,8 +1,10 @@
 import os
 import asyncio
 from typing import List, Dict, Optional
+
 from dotenv import load_dotenv
 import openai
+from engine.chromadb_vector import ChromaVectorDB
 
 load_dotenv()
 
@@ -10,11 +12,15 @@ class RAGAgent:
     """
     Agent thực tế: Retrieval + LLM (OpenAI)
     """
-    def __init__(self, vectordb=None, model_name=None):
-        self.model_name = model_name or os.getenv("MODEL_NAME", "gpt-4o")
-        self.vectordb = vectordb
+    def __init__(self, vectordb=None, model_name=None, use_chroma=False):
+        env_model = os.getenv("MODEL_NAME")
+        self.model_name = model_name or (env_model if env_model else "gpt-4o")
+        if use_chroma:
+            self.vectordb = ChromaVectorDB()
+        else:
+            self.vectordb = vectordb
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
-        openai.api_key = self.openai_api_key
+        self.aoai = openai.AsyncOpenAI(api_key=self.openai_api_key)
 
     async def retrieve(self, question: str, top_k: int = 3) -> List[str]:
         if self.vectordb:
@@ -23,7 +29,7 @@ class RAGAgent:
 
     async def generate(self, question: str, contexts: List[str]) -> Dict:
         prompt = f"Context:\n{chr(10).join(contexts)}\n\nQuestion: {question}\nAnswer:"
-        response = await openai.ChatCompletion.acreate(
+        response = await self.aoai.chat.completions.create(
             model=self.model_name,
             messages=[{"role": "system", "content": "You are a helpful assistant."},
                       {"role": "user", "content": prompt}],
