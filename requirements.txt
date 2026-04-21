@@ -1,3 +1,4 @@
+chromadb>=0.4.24
 pypdf>=4.0.0
 ragas>=0.1.7
 openai>=1.10.0
