@@ -1,4 +1,4 @@
-# Báo cáo cá nhân - Chu Bá Tuấn Anh (Retrieval Evaluator)
+# Báo cáo cá nhân - Chu Bá Tuấn Anh - 2A202600012 (Retrieval Evaluator)
 
 ## 1) Vai trò và phạm vi công việc
 - Đảm nhận vị trí **Person 2 — Retrieval Evaluator** trong Lab Day 14.
